@@ -23,6 +23,7 @@ The exported files will be placed in the specified output directory (default: _s
 import subprocess
 from typing import List, Union
 from pathlib import Path
+import json
 
 import jinja2
 import fire
@@ -46,7 +47,7 @@ def _export_html_wasm(notebook_path: Path, output_dir: Path, as_app: bool = Fals
         bool: True if export succeeded, False otherwise
     """
     # Convert .py extension to .html for the output file
-    output_path: Path = Path(notebook_path.name).with_suffix(".html")
+    output_path: Path = Path(notebook_path.parent.name).with_suffix(".html")
 
     # Base command for marimo export
     cmd: List[str] = ["uvx", "marimo", "export", "html-wasm", "--sandbox"]
@@ -61,7 +62,7 @@ def _export_html_wasm(notebook_path: Path, output_dir: Path, as_app: bool = Fals
 
     try:
         # Create full output path and ensure directory exists
-        output_file: Path = output_dir / Path(notebook_path.name).with_suffix(".html")
+        output_file: Path = output_dir / Path(notebook_path.parent.name).with_suffix(".html")
         output_file.parent.mkdir(parents=True, exist_ok=True)
 
         # Add notebook path and output file to command
@@ -154,7 +155,7 @@ def _export(folder: Path, output_dir: Path, as_app: bool=False) -> List[dict]:
         return []
 
     # Find all Python files recursively in the folder
-    notebooks = list(folder.rglob("*.py"))
+    notebooks = list(item for item in folder.iterdir() if item.is_dir())
     logger.debug(f"Found {len(notebooks)} Python files in {folder}")
 
     # Exit if no notebooks were found
@@ -164,16 +165,20 @@ def _export(folder: Path, output_dir: Path, as_app: bool=False) -> List[dict]:
 
     # For each successfully exported notebook, add its data to the notebook_data list
     notebook_data = [
-        {
-            "display_name": (nb.stem.replace("_", " ").title()),
-            "html_path": str(Path(nb.name).with_suffix(".html")),
-        }
-        for nb in notebooks
-        if _export_html_wasm(nb, output_dir, as_app=as_app)
+        _get_metadata(notebook)
+        for notebook in notebooks
+        if _export_html_wasm(notebook / 'notebook.py', output_dir, as_app=as_app)
     ]
 
     logger.info(f"Successfully exported {len(notebook_data)} out of {len(notebooks)} files from {folder}")
     return notebook_data
+
+def _get_metadata(notebook):
+    with open(notebook / 'metadata.json') as f:
+        metadata = json.load(f)
+    metadata['html_path'] = str(Path(notebook.name).with_suffix(".html"))
+    return metadata
+
 
 def main(
     output_dir: Union[str, Path] = "_site",
