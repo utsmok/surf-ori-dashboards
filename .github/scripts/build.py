@@ -46,7 +46,7 @@ def _export_html_wasm(notebook_path: Path, output_dir: Path, as_app: bool = Fals
         bool: True if export succeeded, False otherwise
     """
     # Convert .py extension to .html for the output file
-    output_path: Path = notebook_path.basename().with_suffix(".html")
+    output_path: Path = Path(notebook_path.name).with_suffix(".html")
 
     # Base command for marimo export
     cmd: List[str] = ["uvx", "marimo", "export", "html-wasm", "--sandbox"]
@@ -61,7 +61,7 @@ def _export_html_wasm(notebook_path: Path, output_dir: Path, as_app: bool = Fals
 
     try:
         # Create full output path and ensure directory exists
-        output_file: Path = output_dir / notebook_path.basename().with_suffix(".html")
+        output_file: Path = output_dir / Path(notebook_path.name).with_suffix(".html")
         output_file.parent.mkdir(parents=True, exist_ok=True)
 
         # Add notebook path and output file to command
@@ -166,7 +166,7 @@ def _export(folder: Path, output_dir: Path, as_app: bool=False) -> List[dict]:
     notebook_data = [
         {
             "display_name": (nb.stem.replace("_", " ").title()),
-            "html_path": str(nb.basename().with_suffix(".html")),
+            "html_path": str(Path(nb.name).with_suffix(".html")),
         }
         for nb in notebooks
         if _export_html_wasm(nb, output_dir, as_app=as_app)
