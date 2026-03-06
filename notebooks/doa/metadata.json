@@ -1,5 +1,12 @@
 {
     "title": "Diamond Open Access journals in the Netherlands",
     "display_name": "Diamond Open Access journals in the Netherlands",
-    "image": "public/screenshot.png"
+    "image": "public/doa/screenshot.png",
+    "authors": [
+        {
+            "name": "Till Bey",
+            "github": "https://github.com/tillbey",
+            "orcid": "https://orcid.org/0000-0001-7509-9875"
+        }
+    ]
 }

@@ -13,7 +13,7 @@
 import marimo
 
 __generated_with = "0.19.4"
-app = marimo.App(width="medium")
+app = marimo.App(app_title="Diamond Open Access journals in the Netherlands", width="full")
 
 
 @app.cell
