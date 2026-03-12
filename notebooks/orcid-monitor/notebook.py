@@ -28,7 +28,7 @@ async with app.setup(hide_code=True):
     import pandas as pd
 
 
-@app.cell(hide_code=True, name="constants")
+@app.cell(hide_code=True)
 def _():
     # Title: Constants
     # Purpose: Define shared data source and metric labels used across the notebook.
@@ -60,14 +60,17 @@ def _():
     DEFAULT_RELATIVE_METRIC = CRIS_REGISTRATIONS
     return (
         ABSOLUTE_METRICS,
+        CRIS_EXPORTS,
+        CRIS_REGISTRATIONS,
         DATA_URL,
         DEFAULT_RELATIVE_METRIC,
+        ORCID_DATABASE,
         RELATIVE_METRICS,
         TOTAL_RESEARCHERS,
     )
 
 
-@app.cell(hide_code=True, name="header")
+@app.cell(hide_code=True)
 def _():
     # Title: Header
     # Purpose: Render the notebook header with title, subtitle, and logos.
@@ -105,7 +108,7 @@ def _():
     return
 
 
-@app.cell(hide_code=True, name="introduction")
+@app.cell(hide_code=True)
 def _():
     # Title: Introduction
     # Purpose: Explain the data source and how the dashboard should be read.
@@ -119,7 +122,7 @@ def _():
     return
 
 
-@app.cell(hide_code=True, name="load_survey_data")
+@app.cell(hide_code=True)
 def _(ABSOLUTE_METRICS, DATA_URL):
     # Title: Survey Data
     # Purpose: Load the spreadsheet, normalize key columns, and derive filter bounds.
@@ -161,7 +164,7 @@ def _(ABSOLUTE_METRICS, DATA_URL):
     )
 
 
-@app.cell(hide_code=True, name="metric_mode_control")
+@app.cell(hide_code=True)
 def _():
     # Title: Metric Mode Control
     # Purpose: Let the user switch between relative and absolute y-axis values.
@@ -174,7 +177,7 @@ def _():
     return (metric_mode,)
 
 
-@app.cell(hide_code=True, name="metric_selector_control")
+@app.cell(hide_code=True)
 def _(
     ABSOLUTE_METRICS,
     DEFAULT_RELATIVE_METRIC,
@@ -205,8 +208,10 @@ def _(
     return (metric_selector,)
 
 
-@app.cell(hide_code=True, name="filter_controls")
-def _(cris_products, max_measurement_date, min_measurement_date, universities):
+@app.cell(hide_code=True)
+def filter_controls(
+    cris_products, max_measurement_date, min_measurement_date, universities
+):
     # Title: Filter Controls
     # Purpose: Build the sidebar widgets for university, CRIS product, and date range.
 
@@ -246,9 +251,24 @@ def _(cris_products, max_measurement_date, min_measurement_date, universities):
     return cris_filter, end_date, start_date, university_filter
 
 
-@app.cell(hide_code=True, name="sidebar")
-def _(
+@app.cell(hide_code=True)
+def date_granularity_control():
+    # Title: Date Granularity Control
+    # Purpose: Let the user choose how measurements are bucketed on the timeline.
+
+    date_granularity = mo.ui.dropdown(
+        options=["Dag", "Week", "Maand", "Kwartaal", "Jaar"],
+        value="Maand",
+        label=f"{mo.icon('lucide:calendar-range')} Datumgranulariteit",
+        full_width=True,
+    )
+    return (date_granularity,)
+
+
+@app.cell(hide_code=True)
+def sidebar_layout(
     cris_filter,
+    date_granularity,
     end_date,
     metric_mode,
     metric_selector,
@@ -268,6 +288,7 @@ def _(
             mo.md("---"),
             metric_mode,
             metric_selector,
+            date_granularity,
             mo.md("---"),
             university_filter,
             cris_filter,
@@ -305,8 +326,10 @@ def _(
     return
 
 
-@app.cell(hide_code=True, name="filtered_survey_data")
-def _(cris_filter, end_date, start_date, survey_data, university_filter):
+@app.cell(hide_code=True)
+def filtered_survey_dataset(
+    cris_filter, end_date, start_date, survey_data, university_filter
+):
     # Title: Filtered Survey Data
     # Purpose: Apply the current sidebar selections to the loaded survey dataset.
 
@@ -341,49 +364,157 @@ def _(cris_filter, end_date, start_date, survey_data, university_filter):
     return (filtered_survey_data,)
 
 
-@app.cell(hide_code=True, name="timeline_data")
-def _(
+@app.cell(hide_code=True)
+def timeline_dataset(
     ABSOLUTE_METRICS,
     TOTAL_RESEARCHERS,
+    date_granularity,
     filtered_survey_data,
     metric_mode,
     metric_selector,
 ):
     # Title: Timeline Data
-    # Purpose: Aggregate filtered measurements per date and derive the selected metric.
+    # Purpose: Keep the latest university measurement per time bucket and derive
+    # both university and national-average timeline series.
 
-    # Sum the absolute metrics per measurement date for the current selection.
-    timeline_data = (
-        filtered_survey_data.groupby("Datum van meting", as_index=False)[ABSOLUTE_METRICS]
-        .sum(min_count=1)
-        .sort_values("Datum van meting")
-    )
+    granularity_config = {
+        "Dag": {"freq": "D", "label": "Dag"},
+        "Week": {"freq": "W-SUN", "label": "Week"},
+        "Maand": {"freq": "M", "label": "Maand"},
+        "Kwartaal": {"freq": "Q", "label": "Kwartaal"},
+        "Jaar": {"freq": "Y", "label": "Jaar"},
+    }
+    selected_granularity = granularity_config[date_granularity.value]
 
-    # Derive the plotted metric and axis formatting for the selected mode.
-    if not timeline_data.empty:
-        if metric_mode.value == "Relatief":
-            denominator = timeline_data[TOTAL_RESEARCHERS].replace({0: pd.NA})
-            timeline_data["metric_value"] = (
-                timeline_data[metric_selector.value] / denominator
-            )
-            y_axis_title = f"{metric_selector.value} / {TOTAL_RESEARCHERS}"
-            y_axis_format = ".0%"
-        else:
-            timeline_data["metric_value"] = timeline_data[metric_selector.value]
-            y_axis_title = metric_selector.value
-            y_axis_format = ",.0f"
-
-        # Drop rows where the selected metric cannot be computed.
-        timeline_data = timeline_data.dropna(subset=["metric_value"]).copy()
+    if filtered_survey_data.empty:
+        timeline_data = pd.DataFrame(
+            columns=[
+                "bucket_date",
+                "period_label",
+                "series_label",
+                "series_type",
+                "Datum van meting",
+                "universities_in_average",
+                *ABSOLUTE_METRICS,
+                "metric_value",
+            ]
+        )
+        series_order = ["Landelijk gemiddelde"]
     else:
-        timeline_data["metric_value"] = []
+        university_measurements = filtered_survey_data.copy()
+        period_index = university_measurements["Datum van meting"].dt.to_period(
+            selected_granularity["freq"]
+        )
+        university_measurements["bucket_date"] = period_index.dt.start_time
+
+        # Within each university and time bucket, keep only the latest submitted measurement.
+        university_measurements = (
+            university_measurements.sort_values(
+                [
+                    "Selecteer je Universiteit",
+                    "bucket_date",
+                    "Tijdstempel",
+                    "Datum van meting",
+                ]
+            )
+            .drop_duplicates(
+                subset=["Selecteer je Universiteit", "bucket_date"], keep="last"
+            )
+            .copy()
+        )
+
+        if date_granularity.value == "Dag":
+            university_measurements["period_label"] = university_measurements[
+                "bucket_date"
+            ].dt.strftime("%Y-%m-%d")
+        elif date_granularity.value == "Week":
+            university_measurements["period_label"] = (
+                "Week van "
+                + university_measurements["bucket_date"].dt.strftime("%Y-%m-%d")
+            )
+        elif date_granularity.value == "Maand":
+            university_measurements["period_label"] = university_measurements[
+                "bucket_date"
+            ].dt.strftime("%Y-%m")
+        elif date_granularity.value == "Kwartaal":
+            university_measurements["period_label"] = (
+                "Q"
+                + university_measurements["bucket_date"].dt.quarter.astype(str)
+                + " "
+                + university_measurements["bucket_date"].dt.strftime("%Y")
+            )
+        else:
+            university_measurements["period_label"] = university_measurements[
+                "bucket_date"
+            ].dt.strftime("%Y")
+
+        university_series = university_measurements[
+            [
+                "bucket_date",
+                "period_label",
+                "Datum van meting",
+                "Selecteer je Universiteit",
+                *ABSOLUTE_METRICS,
+            ]
+        ].copy()
+        university_series["series_label"] = university_series[
+            "Selecteer je Universiteit"
+        ]
+        university_series["series_type"] = "Universiteit"
+        university_series["universities_in_average"] = pd.NA
+
+        national_series = (
+            university_measurements.groupby(["bucket_date", "period_label"], as_index=False)
+            .agg(
+                {
+                    "Datum van meting": "max",
+                    "Selecteer je Universiteit": "nunique",
+                    **{metric: "mean" for metric in ABSOLUTE_METRICS},
+                }
+            )
+            .rename(
+                columns={
+                    "Selecteer je Universiteit": "universities_in_average",
+                }
+            )
+        )
+        national_series["series_label"] = "Landelijk gemiddelde"
+        national_series["series_type"] = "Landelijk gemiddelde"
+
+        timeline_data = pd.concat(
+            [
+                university_series.drop(columns=["Selecteer je Universiteit"]),
+                national_series,
+            ],
+            ignore_index=True,
+            sort=False,
+        )
+        series_order = [
+            "Landelijk gemiddelde",
+            *sorted(university_series["series_label"].dropna().unique()),
+        ]
+
+    # Derive the plotted metric from the per-series absolute metrics.
+    if metric_mode.value == "Relatief":
+        denominator = timeline_data[TOTAL_RESEARCHERS].replace({0: pd.NA})
+        timeline_data["metric_value"] = timeline_data[metric_selector.value] / denominator
+        y_axis_title = f"{metric_selector.value} / {TOTAL_RESEARCHERS}"
+        y_axis_format = ".0%"
+    else:
+        timeline_data["metric_value"] = timeline_data[metric_selector.value]
         y_axis_title = metric_selector.value
         y_axis_format = ",.0f"
-    return timeline_data, y_axis_format, y_axis_title
+
+    timeline_data = (
+        timeline_data.dropna(subset=["metric_value"])
+        .sort_values(["bucket_date", "series_label"])
+        .copy()
+    )
+    return timeline_data, y_axis_format, y_axis_title, series_order
 
 
-@app.cell(hide_code=True, name="summary_overview")
-def _(filtered_survey_data, metric_mode, metric_selector, mo, timeline_data):
+@app.cell(hide_code=True)
+def summary_overview(filtered_survey_data, metric_mode, metric_selector, timeline_data):
     # Title: Summary Overview
     # Purpose: Show key stats for the current selection or an empty-state message.
 
@@ -396,10 +527,16 @@ def _(filtered_survey_data, metric_mode, metric_selector, mo, timeline_data):
             """
         )
     else:
+        summary_series = timeline_data[
+            timeline_data["series_label"] == "Landelijk gemiddelde"
+        ]
+        if summary_series.empty:
+            summary_series = timeline_data
+
         # Read the latest available point so the summary reflects the newest measurement.
-        latest_point = timeline_data.iloc[-1]
+        latest_point = summary_series.sort_values("bucket_date").iloc[-1]
         latest_metric_value = latest_point["metric_value"]
-        latest_measurement_date = latest_point["Datum van meting"]
+        latest_period_label = latest_point["period_label"]
 
         # Format the selected metric according to the current mode.
         if metric_mode.value == "Relatief":
@@ -423,8 +560,8 @@ def _(filtered_survey_data, metric_mode, metric_selector, mo, timeline_data):
                     bordered=True,
                 ),
                 mo.stat(
-                    label="Laatste meetdatum",
-                    value=latest_measurement_date.strftime("%Y-%m-%d"),
+                    label="Laatste periode",
+                    value=latest_period_label,
                     bordered=True,
                 ),
                 mo.stat(
@@ -447,18 +584,19 @@ def _(filtered_survey_data, metric_mode, metric_selector, mo, timeline_data):
         )
 
     summary_content
+    return
 
 
-@app.cell(hide_code=True, name="timeline_chart")
-def _(
+@app.cell(hide_code=True)
+def timeline_chart(
     CRIS_EXPORTS,
     CRIS_REGISTRATIONS,
     ORCID_DATABASE,
     TOTAL_RESEARCHERS,
-    alt,
+    date_granularity,
     filtered_survey_data,
     metric_mode,
-    mo,
+    series_order,
     timeline_data,
     y_axis_format,
     y_axis_title,
@@ -476,24 +614,46 @@ def _(
         else:
             y_axis_label = y_axis_title
 
-        # Draw the main line using the derived metric per measurement date.
+        x_axis_format = {
+            "Dag": "%d %b %Y",
+            "Week": "%d %b %Y",
+            "Maand": "%b %Y",
+            "Kwartaal": "%b %Y",
+            "Jaar": "%Y",
+        }[date_granularity.value]
+
+        # Draw one line per university and a separate national-average line.
         timeline_chart = alt.Chart(timeline_data).mark_line(
-            color="#0f766e",
             point=False,
             strokeWidth=3,
         ).encode(
             x=alt.X(
-                "Datum van meting:T",
-                title="Tijdlijn",
-                axis=alt.Axis(format="%b %Y", labelAngle=-30),
+                "bucket_date:T",
+                title=f"Tijdlijn ({date_granularity.value.lower()})",
+                axis=alt.Axis(format=x_axis_format, labelAngle=-30),
             ),
             y=alt.Y(
                 "metric_value:Q",
                 title=y_axis_label,
                 axis=alt.Axis(format=y_axis_format),
             ),
+            color=alt.Color(
+                "series_label:N",
+                title="Categorie",
+                sort=series_order,
+            ),
+            strokeDash=alt.StrokeDash(
+                "series_type:N",
+                legend=None,
+                scale=alt.Scale(
+                    domain=["Landelijk gemiddelde", "Universiteit"],
+                    range=[[10, 5], [1, 0]],
+                ),
+            ),
             tooltip=[
-                alt.Tooltip("Datum van meting:T", title="Datum"),
+                alt.Tooltip("series_label:N", title="Categorie"),
+                alt.Tooltip("period_label:N", title="Periode"),
+                alt.Tooltip("Datum van meting:T", title="Laatste meting in periode"),
                 alt.Tooltip("metric_value:Q", title=y_axis_title, format=y_axis_format),
                 alt.Tooltip(
                     f"{TOTAL_RESEARCHERS}:Q",
@@ -515,18 +675,24 @@ def _(
                     title=ORCID_DATABASE,
                     format=",.0f",
                 ),
+                alt.Tooltip(
+                    "universities_in_average:Q",
+                    title="Universiteiten in gemiddelde",
+                    format=",.0f",
+                ),
             ],
         )
 
         # Overlay points so individual measurements remain easy to inspect.
         timeline_points = alt.Chart(timeline_data).mark_circle(
-            color="#0f766e",
-            size=90,
+            size=70,
         ).encode(
-            x="Datum van meting:T",
+            x="bucket_date:T",
             y="metric_value:Q",
+            color=alt.Color("series_label:N", title="Categorie", sort=series_order),
             tooltip=[
-                alt.Tooltip("Datum van meting:T", title="Datum"),
+                alt.Tooltip("series_label:N", title="Categorie"),
+                alt.Tooltip("period_label:N", title="Periode"),
                 alt.Tooltip("metric_value:Q", title=y_axis_title, format=y_axis_format),
             ],
         )
@@ -536,7 +702,7 @@ def _(
             [
                 mo.md("## Tijdlijn"),
                 mo.md(
-                    "De grafiek telt de gekozen selectie per meetdatum op. In relatieve modus is de waarde de geselecteerde teller gedeeld door `Aantal onderzoekers`."
+                    "Per universiteit toont de grafiek steeds de laatst ingestuurde meting binnen de gekozen periode. De lijn `Landelijk gemiddelde` is het gemiddelde van alle universiteiten die in die periode een meting hebben."
                 ),
                 (timeline_chart + timeline_points)
                 .properties(height=460, width="container")
@@ -547,17 +713,18 @@ def _(
         )
 
     timeline_content
+    return
 
 
 @app.cell
-def _(filtered_survey_data):
+def filtered_survey_data_table(filtered_survey_data):
     filtered_survey_data
     return
 
 
 @app.cell
-def _(filtered_survey_data):
-    mo.ui.table(filtered_survey_data)
+def timeline_data_table(timeline_data):
+    mo.ui.table(timeline_data)
     return
 
 
