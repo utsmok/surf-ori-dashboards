@@ -14,7 +14,6 @@ import marimo
 __generated_with = "0.20.4"
 app = marimo.App(width="full", app_title="Dutch ORCiD Monitor")
 
-
 async with app.setup(hide_code=True):
     try:
         import micropip
@@ -384,70 +383,70 @@ def _(
 
 
 @app.cell(hide_code=True, name="summary_overview")
-def _(filtered_survey_data, metric_mode, metric_selector, timeline_data):
+def _(filtered_survey_data, metric_mode, metric_selector, mo, timeline_data):
     # Title: Summary Overview
     # Purpose: Show key stats for the current selection or an empty-state message.
 
     # Render a clear message when the current filters produce no usable timeline data.
     if filtered_survey_data.empty or timeline_data.empty:
-        mo.md(
+        summary_content = mo.md(
             """
             ## Selectie zonder resultaten
             Pas de filters in de sidebar aan om metingen in de tijdlijn te tonen.
             """
         )
-        return
-
-    # Read the latest available point so the summary reflects the newest measurement.
-    latest_point = timeline_data.iloc[-1]
-    latest_metric_value = latest_point["metric_value"]
-    latest_measurement_date = latest_point["Datum van meting"]
-
-    # Format the selected metric according to the current mode.
-    if metric_mode.value == "Relatief":
-        latest_value = "{:.1%}".format(latest_metric_value)
     else:
-        latest_value = f"{latest_metric_value:,.0f}"
+        # Read the latest available point so the summary reflects the newest measurement.
+        latest_point = timeline_data.iloc[-1]
+        latest_metric_value = latest_point["metric_value"]
+        latest_measurement_date = latest_point["Datum van meting"]
 
-    # Compose the summary cards with counts, coverage, and the latest metric value.
-    summary_cards = mo.hstack(
-        [
-            mo.stat(
-                label="Metingen in selectie",
-                value=f"{len(filtered_survey_data):,}",
-                bordered=True,
-            ),
-            mo.stat(
-                label="Universiteiten in selectie",
-                value=int(
-                    filtered_survey_data["Selecteer je Universiteit"].nunique()
+        # Format the selected metric according to the current mode.
+        if metric_mode.value == "Relatief":
+            latest_value = "{:.1%}".format(latest_metric_value)
+        else:
+            latest_value = f"{latest_metric_value:,.0f}"
+
+        # Compose the summary cards with counts, coverage, and the latest metric value.
+        summary_cards = mo.hstack(
+            [
+                mo.stat(
+                    label="Metingen in selectie",
+                    value=f"{len(filtered_survey_data):,}",
+                    bordered=True,
                 ),
-                bordered=True,
-            ),
-            mo.stat(
-                label="Laatste meetdatum",
-                value=latest_measurement_date.strftime("%Y-%m-%d"),
-                bordered=True,
-            ),
-            mo.stat(
-                label=metric_selector.value,
-                value=latest_value,
-                bordered=True,
-            ),
-        ],
-        widths="equal",
-        align="center",
-    )
+                mo.stat(
+                    label="Universiteiten in selectie",
+                    value=int(
+                        filtered_survey_data["Selecteer je Universiteit"].nunique()
+                    ),
+                    bordered=True,
+                ),
+                mo.stat(
+                    label="Laatste meetdatum",
+                    value=latest_measurement_date.strftime("%Y-%m-%d"),
+                    bordered=True,
+                ),
+                mo.stat(
+                    label=metric_selector.value,
+                    value=latest_value,
+                    bordered=True,
+                ),
+            ],
+            widths="equal",
+            align="center",
+        )
 
-    # Render the summary section above the timeline chart.
-    mo.vstack(
-        [
-            mo.md("## Overzicht"),
-            summary_cards,
-        ],
-        gap=1,
-    )
-    return
+        # Render the summary section above the timeline chart.
+        summary_content = mo.vstack(
+            [
+                mo.md("## Overzicht"),
+                summary_cards,
+            ],
+            gap=1,
+        )
+
+    summary_content
 
 
 @app.cell(hide_code=True, name="timeline_chart")
@@ -459,6 +458,7 @@ def _(
     alt,
     filtered_survey_data,
     metric_mode,
+    mo,
     timeline_data,
     y_axis_format,
     y_axis_title,
@@ -468,83 +468,96 @@ def _(
 
     # Skip chart rendering when the active filters do not produce any timeline points.
     if filtered_survey_data.empty or timeline_data.empty:
-        return
-
-    # Add a percentage hint to the axis label when the chart is in relative mode.
-    if metric_mode.value == "Relatief":
-        y_axis_label = f"{y_axis_title} (%)"
+        timeline_content = mo.md("")
     else:
-        y_axis_label = y_axis_title
+        # Add a percentage hint to the axis label when the chart is in relative mode.
+        if metric_mode.value == "Relatief":
+            y_axis_label = f"{y_axis_title} (%)"
+        else:
+            y_axis_label = y_axis_title
 
-    # Draw the main line using the derived metric per measurement date.
-    timeline_chart = alt.Chart(timeline_data).mark_line(
-        color="#0f766e",
-        point=False,
-        strokeWidth=3,
-    ).encode(
-        x=alt.X(
-            "Datum van meting:T",
-            title="Tijdlijn",
-            axis=alt.Axis(format="%b %Y", labelAngle=-30),
-        ),
-        y=alt.Y(
-            "metric_value:Q",
-            title=y_axis_label,
-            axis=alt.Axis(format=y_axis_format),
-        ),
-        tooltip=[
-            alt.Tooltip("Datum van meting:T", title="Datum"),
-            alt.Tooltip("metric_value:Q", title=y_axis_title, format=y_axis_format),
-            alt.Tooltip(
-                f"{TOTAL_RESEARCHERS}:Q",
-                title=TOTAL_RESEARCHERS,
-                format=",.0f",
+        # Draw the main line using the derived metric per measurement date.
+        timeline_chart = alt.Chart(timeline_data).mark_line(
+            color="#0f766e",
+            point=False,
+            strokeWidth=3,
+        ).encode(
+            x=alt.X(
+                "Datum van meting:T",
+                title="Tijdlijn",
+                axis=alt.Axis(format="%b %Y", labelAngle=-30),
             ),
-            alt.Tooltip(
-                f"{CRIS_REGISTRATIONS}:Q",
-                title=CRIS_REGISTRATIONS,
-                format=",.0f",
+            y=alt.Y(
+                "metric_value:Q",
+                title=y_axis_label,
+                axis=alt.Axis(format=y_axis_format),
             ),
-            alt.Tooltip(
-                f"{CRIS_EXPORTS}:Q",
-                title=CRIS_EXPORTS,
-                format=",.0f",
-            ),
-            alt.Tooltip(
-                f"{ORCID_DATABASE}:Q",
-                title=ORCID_DATABASE,
-                format=",.0f",
-            ),
-        ],
-    )
+            tooltip=[
+                alt.Tooltip("Datum van meting:T", title="Datum"),
+                alt.Tooltip("metric_value:Q", title=y_axis_title, format=y_axis_format),
+                alt.Tooltip(
+                    f"{TOTAL_RESEARCHERS}:Q",
+                    title=TOTAL_RESEARCHERS,
+                    format=",.0f",
+                ),
+                alt.Tooltip(
+                    f"{CRIS_REGISTRATIONS}:Q",
+                    title=CRIS_REGISTRATIONS,
+                    format=",.0f",
+                ),
+                alt.Tooltip(
+                    f"{CRIS_EXPORTS}:Q",
+                    title=CRIS_EXPORTS,
+                    format=",.0f",
+                ),
+                alt.Tooltip(
+                    f"{ORCID_DATABASE}:Q",
+                    title=ORCID_DATABASE,
+                    format=",.0f",
+                ),
+            ],
+        )
 
-    # Overlay points so individual measurements remain easy to inspect.
-    timeline_points = alt.Chart(timeline_data).mark_circle(
-        color="#0f766e",
-        size=90,
-    ).encode(
-        x="Datum van meting:T",
-        y="metric_value:Q",
-        tooltip=[
-            alt.Tooltip("Datum van meting:T", title="Datum"),
-            alt.Tooltip("metric_value:Q", title=y_axis_title, format=y_axis_format),
-        ],
-    )
+        # Overlay points so individual measurements remain easy to inspect.
+        timeline_points = alt.Chart(timeline_data).mark_circle(
+            color="#0f766e",
+            size=90,
+        ).encode(
+            x="Datum van meting:T",
+            y="metric_value:Q",
+            tooltip=[
+                alt.Tooltip("Datum van meting:T", title="Datum"),
+                alt.Tooltip("metric_value:Q", title=y_axis_title, format=y_axis_format),
+            ],
+        )
 
-    # Render the explanatory text together with the combined chart.
-    mo.vstack(
-        [
-            mo.md("## Tijdlijn"),
-            mo.md(
-                "De grafiek telt de gekozen selectie per meetdatum op. In relatieve modus is de waarde de geselecteerde teller gedeeld door `Aantal onderzoekers`."
-            ),
-            (timeline_chart + timeline_points)
-            .properties(height=460, width="container")
-            .configure_axis(labelFontSize=12, titleFontSize=13)
-            .configure_view(strokeOpacity=0),
-        ],
-        gap=1,
-    )
+        # Render the explanatory text together with the combined chart.
+        timeline_content = mo.vstack(
+            [
+                mo.md("## Tijdlijn"),
+                mo.md(
+                    "De grafiek telt de gekozen selectie per meetdatum op. In relatieve modus is de waarde de geselecteerde teller gedeeld door `Aantal onderzoekers`."
+                ),
+                (timeline_chart + timeline_points)
+                .properties(height=460, width="container")
+                .configure_axis(labelFontSize=12, titleFontSize=13)
+                .configure_view(strokeOpacity=0),
+            ],
+            gap=1,
+        )
+
+    timeline_content
+
+
+@app.cell
+def _(filtered_survey_data):
+    filtered_survey_data
+    return
+
+
+@app.cell
+def _(filtered_survey_data):
+    mo.ui.table(filtered_survey_data)
     return
 
 
