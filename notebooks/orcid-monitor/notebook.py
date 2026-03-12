@@ -29,7 +29,7 @@ async with app.setup(hide_code=True):
 
 
 @app.cell(hide_code=True)
-def _():
+def constants():
     # Title: Constants
     # Purpose: Define shared data source and metric labels used across the notebook.
 
@@ -71,7 +71,7 @@ def _():
 
 
 @app.cell(hide_code=True)
-def _():
+def header():
     # Title: Header
     # Purpose: Render the notebook header with title, subtitle, and logos.
 
@@ -114,16 +114,16 @@ def _():
     # Purpose: Explain the data source and how the dashboard should be read.
 
     mo.md("""
-    Deze dashboardweergave gebruikt de SURF ORCiD monitor spreadsheet als bron.
+    Dit dashboard gebruikt de Nationale ORCiD monitor [spreadsheet](https://docs.google.com/spreadsheets/d/e/2PACX-1vSVbrjJLpVfZ_zzzHHCuyuoy29OXla9R17XtzcbOEnIDc9I4-3k_7AyNjh5Ab04t9T54ge8idgpfMWi/pub?output=html) als bron. Ingevuld door de instellingen via dit [*web formulier*](https://docs.google.com/forms/d/e/1FAIpQLScxSZqFRWBO_sniAKiDL5mEiEEtkfcs2XOhWlV-BHnOzd_qXw/viewform).
     Kies in de sidebar welke instellingen je wilt vergelijken en bepaal vervolgens
     of de y-as absolute aantallen of relatieve waarden ten opzichte van
-    `Aantal onderzoekers` toont.
+    `Aantal onderzoekers` toont. f
     """)
     return
 
 
 @app.cell(hide_code=True)
-def _(ABSOLUTE_METRICS, DATA_URL):
+def survey_data(ABSOLUTE_METRICS, DATA_URL):
     # Title: Survey Data
     # Purpose: Load the spreadsheet, normalize key columns, and derive filter bounds.
 
@@ -165,7 +165,7 @@ def _(ABSOLUTE_METRICS, DATA_URL):
 
 
 @app.cell(hide_code=True)
-def _():
+def metric_mode_control():
     # Title: Metric Mode Control
     # Purpose: Let the user switch between relative and absolute y-axis values.
 
@@ -178,7 +178,7 @@ def _():
 
 
 @app.cell(hide_code=True)
-def _(
+def metric_selector_control(
     ABSOLUTE_METRICS,
     DEFAULT_RELATIVE_METRIC,
     RELATIVE_METRICS,
@@ -210,7 +210,10 @@ def _(
 
 @app.cell(hide_code=True)
 def filter_controls(
-    cris_products, max_measurement_date, min_measurement_date, universities
+    cris_products,
+    max_measurement_date,
+    min_measurement_date,
+    universities,
 ):
     # Title: Filter Controls
     # Purpose: Build the sidebar widgets for university, CRIS product, and date range.
@@ -328,7 +331,11 @@ def sidebar_layout(
 
 @app.cell(hide_code=True)
 def filtered_survey_dataset(
-    cris_filter, end_date, start_date, survey_data, university_filter
+    cris_filter,
+    end_date,
+    start_date,
+    survey_data,
+    university_filter,
 ):
     # Title: Filtered Survey Data
     # Purpose: Apply the current sidebar selections to the loaded survey dataset.
@@ -510,11 +517,22 @@ def timeline_dataset(
         .sort_values(["bucket_date", "series_label"])
         .copy()
     )
-    return timeline_data, y_axis_format, y_axis_title, series_order
+    return (
+        series_order,
+        timeline_data,
+        university_series,
+        y_axis_format,
+        y_axis_title,
+    )
 
 
 @app.cell(hide_code=True)
-def summary_overview(filtered_survey_data, metric_mode, metric_selector, timeline_data):
+def summary_overview(
+    filtered_survey_data,
+    metric_mode,
+    metric_selector,
+    timeline_data,
+):
     # Title: Summary Overview
     # Purpose: Show key stats for the current selection or an empty-state message.
 
@@ -717,14 +735,8 @@ def timeline_chart(
 
 
 @app.cell
-def filtered_survey_data_table(filtered_survey_data):
-    filtered_survey_data
-    return
-
-
-@app.cell
-def timeline_data_table(timeline_data):
-    mo.ui.table(timeline_data)
+def timeline_data_table(university_series):
+    mo.ui.table(university_series)
     return
 
 
