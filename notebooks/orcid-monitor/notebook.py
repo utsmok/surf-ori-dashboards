@@ -622,6 +622,38 @@ def timeline_chart(
     # Title: Timeline Chart
     # Purpose: Plot the aggregated measurements over time for the selected metric.
 
+    tooltip_fields = [
+        alt.Tooltip("series_label:N", title="Categorie"),
+        alt.Tooltip("period_label:N", title="Periode"),
+        alt.Tooltip("Datum van meting:T", title="Laatste meting in bucket"),
+        alt.Tooltip("metric_value:Q", title=y_axis_title, format=y_axis_format),
+        alt.Tooltip(
+            f"{TOTAL_RESEARCHERS}:Q",
+            title=TOTAL_RESEARCHERS,
+            format=",.0f",
+        ),
+        alt.Tooltip(
+            f"{CRIS_REGISTRATIONS}:Q",
+            title=CRIS_REGISTRATIONS,
+            format=",.0f",
+        ),
+        alt.Tooltip(
+            f"{CRIS_EXPORTS}:Q",
+            title=CRIS_EXPORTS,
+            format=",.0f",
+        ),
+        alt.Tooltip(
+            f"{ORCID_DATABASE}:Q",
+            title=ORCID_DATABASE,
+            format=",.0f",
+        ),
+        alt.Tooltip(
+            "universities_in_average:Q",
+            title="Universiteiten in gemiddelde",
+            format=",.0f",
+        ),
+    ]
+
     # Skip chart rendering when the active filters do not produce any timeline points.
     if filtered_survey_data.empty or timeline_data.empty:
         timeline_content = mo.md("")
@@ -668,37 +700,7 @@ def timeline_chart(
                     range=[[10, 5], [1, 0]],
                 ),
             ),
-            tooltip=[
-                alt.Tooltip("series_label:N", title="Categorie"),
-                alt.Tooltip("period_label:N", title="Periode"),
-                alt.Tooltip("Datum van meting:T", title="Laatste meting in periode"),
-                alt.Tooltip("metric_value:Q", title=y_axis_title, format=y_axis_format),
-                alt.Tooltip(
-                    f"{TOTAL_RESEARCHERS}:Q",
-                    title=TOTAL_RESEARCHERS,
-                    format=",.0f",
-                ),
-                alt.Tooltip(
-                    f"{CRIS_REGISTRATIONS}:Q",
-                    title=CRIS_REGISTRATIONS,
-                    format=",.0f",
-                ),
-                alt.Tooltip(
-                    f"{CRIS_EXPORTS}:Q",
-                    title=CRIS_EXPORTS,
-                    format=",.0f",
-                ),
-                alt.Tooltip(
-                    f"{ORCID_DATABASE}:Q",
-                    title=ORCID_DATABASE,
-                    format=",.0f",
-                ),
-                alt.Tooltip(
-                    "universities_in_average:Q",
-                    title="Universiteiten in gemiddelde",
-                    format=",.0f",
-                ),
-            ],
+            tooltip=tooltip_fields,
         )
 
         # Overlay points so individual measurements remain easy to inspect.
@@ -708,11 +710,7 @@ def timeline_chart(
             x="bucket_date:T",
             y="metric_value:Q",
             color=alt.Color("series_label:N", title="Categorie", sort=series_order),
-            tooltip=[
-                alt.Tooltip("series_label:N", title="Categorie"),
-                alt.Tooltip("period_label:N", title="Periode"),
-                alt.Tooltip("metric_value:Q", title=y_axis_title, format=y_axis_format),
-            ],
+            tooltip=tooltip_fields,
         )
 
         # Render the explanatory text together with the combined chart.
