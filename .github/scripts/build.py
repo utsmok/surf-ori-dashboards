@@ -30,7 +30,7 @@ import fire
 
 from loguru import logger
 
-def _export_html_wasm(notebook_path: Path, output_dir: Path, as_app: bool = False, format: str = 'html-wasm') -> bool:
+def _export_html_wasm(notebook_path: Path, output_dir: Path, format: str = 'app') -> bool:
     """Export a single marimo notebook to HTML/WebAssembly format.
 
     This function takes a marimo notebook (.py file) and exports it to HTML/WebAssembly format.
@@ -51,17 +51,19 @@ def _export_html_wasm(notebook_path: Path, output_dir: Path, as_app: bool = Fals
 
     # Base command for marimo export
     if format == 'html':
+        logger.info(f"Exporting {notebook_path} to {output_path} as html")
         cmd: List[str] = ["uvx", "marimo", "export", "html", "--sandbox", "--no-include-code"]
-    else:    
-        cmd: List[str] = ["uvx", "marimo", "export", "html-wasm", "--sandbox"]
-
-        # Configure export mode based on whether it's an app or a notebook
-        if as_app:
-            logger.info(f"Exporting {notebook_path} to {output_path} as app")
-            cmd.extend(["--mode", "run", "--no-show-code"])  # Apps run in "run" mode with hidden code
-        else:
-            logger.info(f"Exporting {notebook_path} to {output_path} as notebook")
-            cmd.extend(["--mode", "edit"])  # Notebooks run in "edit" mode
+    elif format == 'app':
+        logger.info(f"Exporting {notebook_path} to {output_path} as app")
+        # Apps run in "run" mode with hidden code
+        cmd: List[str] = ["uvx", "marimo", "export", "html-wasm", "--sandbox", "--mode", "run", "--no-show-code"]
+    elif format == 'notebook':
+        logger.info(f"Exporting {notebook_path} to {output_path} as notebook")
+        # Notebooks run in "edit" mode
+        cmd: List[str] = ["uvx", "marimo", "export", "html-wasm", "--sandbox", "--mode", "edit"]
+    else:
+         logger.error(f'format "{format}" not recognized, needs to be one off html, app, notebook')
+         return False
 
     try:
         # Create full output path and ensure directory exists
@@ -137,7 +139,7 @@ def _generate_index(output_dir: Path, template_file: Path, notebooks_data: List[
         logger.error(f"Error rendering template: {e}")
 
 
-def _export(folder: Path, output_dir: Path, as_app: bool=False) -> List[dict]:
+def _export(folder: Path, output_dir: Path) -> List[dict]:
     """Export all marimo notebooks in a folder to HTML/WebAssembly format.
 
     This function finds all Python files in the specified folder and exports them
@@ -170,7 +172,7 @@ def _export(folder: Path, output_dir: Path, as_app: bool=False) -> List[dict]:
     notebook_data = [
         _get_metadata(notebook)
         for notebook in notebooks
-        if _export_html_wasm(notebook / 'notebook.py', output_dir, as_app=as_app, format=_get_metadata(notebook).get('format', 'html-wasm'))
+        if _export_html_wasm(notebook / 'notebook.py', output_dir, format=_get_metadata(notebook).get('format', 'app'))
     ]
 
     logger.info(f"Successfully exported {len(notebook_data)} out of {len(notebooks)} files from {folder}")
@@ -218,7 +220,7 @@ def main(
     notebooks_data = []#_export(Path("notebooks"), output_dir, as_app=False)
 
     # Export apps from the apps/ directory
-    apps_data = _export(Path("notebooks"), output_dir, as_app=False)
+    apps_data = _export(Path("notebooks"), output_dir)
 
     # Exit if no notebooks or apps were found
     if not notebooks_data and not apps_data:
