@@ -3,7 +3,7 @@ Build script for marimo notebooks.
 
 This script exports marimo notebooks to HTML/WebAssembly format and generates
 an index.html file that lists all the notebooks. It handles both regular notebooks
-(from the notebooks/ directory) and apps (from the apps/ directory).
+(from the notebooks/ directory).
 
 The script can be run from the command line with optional arguments:
     uv run .github/scripts/build.py [--output-dir OUTPUT_DIR]
@@ -89,7 +89,7 @@ def _export_html_wasm(notebook_path: Path, output_dir: Path, format: str = 'app'
         return False
 
 
-def _generate_index(output_dir: Path, template_file: Path, notebooks_data: List[dict] | None = None, apps_data: List[dict] | None = None) -> None:
+def _generate_index(output_dir: Path, template_file: Path, notebooks_data: List[dict] | None = None) -> None:
     """Generate an index.html file that lists all the notebooks.
 
     This function creates an HTML index page that displays links to all the exported
@@ -98,7 +98,6 @@ def _generate_index(output_dir: Path, template_file: Path, notebooks_data: List[
 
     Args:
         notebooks_data (List[dict]): List of dictionaries with data for notebooks
-        apps_data (List[dict]): List of dictionaries with data for apps
         output_dir (Path): Directory where the index.html file will be saved
         template_file (Path, optional): Path to the template file. If None, uses the default template.
 
@@ -123,8 +122,8 @@ def _generate_index(output_dir: Path, template_file: Path, notebooks_data: List[
         )
         template = env.get_template(template_name)
 
-        # Render the template with notebook and app data
-        rendered_html = template.render(notebooks=notebooks_data, apps=apps_data)
+        # Render the template with notebook data
+        rendered_html = template.render(notebooks=notebooks_data)
 
         # Write the rendered HTML to the index.html file
         with open(index_path, "w") as f:
@@ -149,7 +148,6 @@ def _export(folder: Path, output_dir: Path) -> List[dict]:
     Args:
         folder (Path): Path to the folder containing marimo notebooks
         output_dir (Path): Directory where the exported HTML files will be saved
-        as_app (bool, optional): Whether to export as apps (run mode) or notebooks (edit mode).
 
     Returns:
         List[dict]: List of dictionaries with "display_name" and "html_path" for each notebook
@@ -193,7 +191,7 @@ def main(
 
     This function:
     1. Parses command line arguments
-    2. Exports all marimo notebooks in the 'notebooks' and 'apps' directories
+    2. Exports all marimo notebooks in the 'notebooks' directories
     3. Generates an index.html file that lists all the notebooks
 
     Command line arguments:
@@ -216,19 +214,15 @@ def main(
     template_file: Path = Path(template)
     logger.info(f"Using template file: {template_file}")
 
-    # Export notebooks from the notebooks/ directory
-    notebooks_data = []#_export(Path("notebooks"), output_dir, as_app=False)
+    # Export notebooks from the notebooks
+    notebooks_data = _export(Path("notebooks"), output_dir)
 
-    # Export apps from the apps/ directory
-    apps_data = _export(Path("notebooks"), output_dir)
+    # Exit if no notebooks
+    if not notebooks_data:
+        logger.warning("No notebooks found!")
 
-    # Exit if no notebooks or apps were found
-    if not notebooks_data and not apps_data:
-        logger.warning("No notebooks or apps found!")
-        return
-
-    # Generate the index.html file that lists all notebooks and apps
-    _generate_index(output_dir=output_dir, notebooks_data=notebooks_data, apps_data=apps_data, template_file=template_file)
+    # Generate the index.html file that lists all notebooks
+    _generate_index(output_dir=output_dir, notebooks_data=notebooks_data, template_file=template_file)
 
     logger.info(f"Build completed successfully. Output directory: {output_dir}")
 
